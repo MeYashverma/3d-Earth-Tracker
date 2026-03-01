@@ -7,6 +7,8 @@ A browser-based **CesiumJS** MVP that visualizes:
 - Simulated road traffic and vehicle particles
 - Simulated traffic lights at detected intersections
 - Public CCTV links embedded in a right-side panel
+- Progressive traffic loading in small render batches to avoid UI stalls
+- Camera-driven refresh + viewport culling so only nearby/visible traffic entities stay active
 
 ## Features
 
