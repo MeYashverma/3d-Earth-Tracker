@@ -1,12 +1,17 @@
 const POLL_INTERVAL_MS = 12000;
 const SIM_INTERVAL_MS = 140;
 const MAX_AIRCRAFT = 90;
-const MAX_ROADS = 120;
-const MAX_TRAFFIC_LIGHTS = 48;
-const MAX_VEHICLES = 120;
-const VEHICLE_ROAD_LIMIT = 28;
-const MAX_BUILDINGS = 200;
-const ROAD_LOAD_MAX_HEIGHT = 120000;
+const MAX_ROADS = 220;
+const MAX_TRAFFIC_LIGHTS = 90;
+const MAX_VEHICLES = 180;
+const VEHICLE_ROAD_LIMIT = 60;
+const MAX_BUILDINGS = 280;
+const ROAD_LOAD_MAX_HEIGHT = 180000;
+
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter'
+];
 
 const cctvSources = [
   { name: 'EarthCam Times Square', url: 'https://www.earthcam.com/usa/newyork/timessquare/?cam=tsrobo1' },
@@ -27,7 +32,8 @@ const state = {
   lastFocus: null,
   loadingTraffic: false,
   loadingBuildings: false,
-  terrainIsReal: false
+  terrainIsReal: false,
+  usingCesiumBuildings: false
 };
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -55,7 +61,7 @@ viewer.resolutionScale = Math.min(1, 1.3 / window.devicePixelRatio);
 const flightLayer = new Cesium.CustomDataSource('flights');
 const trafficLayer = new Cesium.CustomDataSource('traffic');
 const cctvLayer = new Cesium.CustomDataSource('cctv');
-const buildingsLayer = new Cesium.CustomDataSource('buildings');
+const buildingsLayer = new Cesium.CustomDataSource('buildingsFallback');
 viewer.dataSources.add(flightLayer);
 viewer.dataSources.add(trafficLayer);
 viewer.dataSources.add(cctvLayer);
@@ -86,6 +92,7 @@ ui.cctvFrame.src = cctvSources[0].url;
 ui.cctvSelect.addEventListener('change', () => {
   ui.cctvFrame.src = ui.cctvSelect.value;
 });
+
 ui.toggleFlights.addEventListener('change', () => {
   flightLayer.show = ui.toggleFlights.checked;
 });
@@ -122,10 +129,17 @@ ui.searchForm.addEventListener('submit', async (event) => {
       const north = Number(first.boundingbox[1]);
       const west = Number(first.boundingbox[2]);
       const east = Number(first.boundingbox[3]);
-      const rect = Cesium.Rectangle.fromDegrees(west, south, east, north);
-      viewer.camera.flyTo({ destination: rect, duration: 1.2 });
+      viewer.camera.flyTo({
+        destination: Cesium.Rectangle.fromDegrees(west, south, east, north),
+        duration: 1.4,
+        orientation: { pitch: Cesium.Math.toRadians(-42) }
+      });
     } else {
-      viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(lon, lat, 22000), duration: 1.2 });
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 20000),
+        duration: 1.4,
+        orientation: { pitch: Cesium.Math.toRadians(-45) }
+      });
     }
 
     await refreshTrafficForFocus(lon, lat, true);
@@ -141,7 +155,6 @@ viewer.selectedEntityChanged.addEventListener((entity) => {
     ui.selectionInfo.textContent = 'Click an object to view details.';
     return;
   }
-
   const props = entity.properties;
   if (!props) return;
 
@@ -166,28 +179,26 @@ viewer.camera.moveEnd.addEventListener(async () => {
 });
 
 function distanceDeg(lon1, lat1, lon2, lat2) {
-  const dx = lon1 - lon2;
-  const dy = lat1 - lat2;
-  return Math.hypot(dx, dy);
+  return Math.hypot(lon1 - lon2, lat1 - lat2);
 }
 
 function getRoadRadiusByHeight(height) {
-  if (height < 6000) return 0.02;
-  if (height < 18000) return 0.035;
-  if (height < 60000) return 0.06;
-  return 0.08;
+  if (height < 4000) return 0.015;
+  if (height < 12000) return 0.03;
+  if (height < 35000) return 0.05;
+  if (height < 80000) return 0.07;
+  return 0.1;
 }
 
 function getBuildingRadiusByHeight(height) {
-  if (height < 10000) return 0.018;
-  if (height < 25000) return 0.025;
+  if (height < 6000) return 0.015;
+  if (height < 18000) return 0.025;
   return 0.04;
 }
 
 async function initImageryAndTerrain() {
   viewer.imageryLayers.removeAll();
-
-  const providers = [
+  const imageryProviders = [
     new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }),
     new Cesium.UrlTemplateImageryProvider({
       url: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
@@ -195,12 +206,12 @@ async function initImageryAndTerrain() {
     })
   ];
 
-  for (const provider of providers) {
+  for (const provider of imageryProviders) {
     try {
       viewer.imageryLayers.addImageryProvider(provider);
       break;
     } catch (err) {
-      console.warn('Imagery provider failed.', err);
+      console.warn('Imagery provider failed, trying next.', err);
     }
   }
 
@@ -221,12 +232,11 @@ async function init3DBuildings() {
     const tileset = await Cesium.createOsmBuildingsAsync();
     tileset.maximumScreenSpaceError = 18;
     tileset.skipLevelOfDetail = true;
-    tileset.show = true;
     viewer.scene.primitives.add(tileset);
-    return true;
+    state.usingCesiumBuildings = true;
   } catch (err) {
-    console.warn('Cesium OSM 3D buildings unavailable; using local OSM extrusion fallback.', err);
-    return false;
+    state.usingCesiumBuildings = false;
+    console.warn('Cesium OSM 3D buildings unavailable; will use OSM extrusion fallback.', err);
   }
 }
 
@@ -238,8 +248,7 @@ async function refreshTrafficForFocus(lon, lat, force) {
       state.roads = [];
       state.trafficLights = [];
       state.vehicles = [];
-      ui.selectionInfo.textContent = 'Zoom in to load roads, vehicles, and traffic lights.';
-      viewer.scene.requestRender();
+      ui.selectionInfo.textContent = 'Zoom in to load roads and traffic simulation.';
     }
     return;
   }
@@ -254,6 +263,7 @@ async function refreshTrafficForFocus(lon, lat, force) {
   state.loadingTraffic = true;
   state.lastTrafficLoad = now;
   state.lastFocus = { lon, lat };
+  ui.selectionInfo.textContent = 'Loading roads...';
 
   try {
     await loadRoadsNear(lon, lat, getRoadRadiusByHeight(height));
@@ -263,15 +273,20 @@ async function refreshTrafficForFocus(lon, lat, force) {
 }
 
 async function refreshBuildingsForFocus(lon, lat, force) {
+  if (state.usingCesiumBuildings) {
+    buildingsLayer.entities.removeAll();
+    return;
+  }
+
   const height = viewer.camera.positionCartographic.height;
-  if (height > 90000 && !force) {
+  if (height > 120000 && !force) {
     buildingsLayer.entities.removeAll();
     return;
   }
 
   const now = Date.now();
-  const minInterval = force ? 0 : 12000;
-  const movedLittle = state.lastFocus && distanceDeg(lon, lat, state.lastFocus.lon, state.lastFocus.lat) < 0.03;
+  const minInterval = force ? 0 : 9000;
+  const movedLittle = state.lastFocus && distanceDeg(lon, lat, state.lastFocus.lon, state.lastFocus.lat) < 0.025;
 
   if (state.loadingBuildings) return;
   if (!force && now - state.lastBuildingLoad < minInterval && movedLittle) return;
@@ -280,9 +295,7 @@ async function refreshBuildingsForFocus(lon, lat, force) {
   state.lastBuildingLoad = now;
 
   try {
-    if (!state.terrainIsReal) {
-      await loadFallbackBuildings(lon, lat, getBuildingRadiusByHeight(height));
-    }
+    await loadFallbackBuildings(lon, lat, getBuildingRadiusByHeight(height));
   } finally {
     state.loadingBuildings = false;
   }
@@ -308,7 +321,6 @@ async function pollFlights(force = false) {
     const payload = await response.json();
     updateFlightEntities(payload.states || []);
   } catch (err) {
-    console.warn('OpenSky unavailable; using simulated flights.', err);
     updateFlightEntities(simulateFlights());
   }
 }
@@ -319,23 +331,22 @@ function updateFlightEntities(statesInput) {
 
   states.forEach((s, idx) => {
     const isSimulated = Array.isArray(s) && s.length < 17;
-    const icao = isSimulated ? s[0] : (s[0] || `sim-${idx}`);
+    const id = isSimulated ? s[0] : (s[0] || `sim-${idx}`);
     const lon = Number(isSimulated ? s[1] : s[5]);
     const lat = Number(isSimulated ? s[2] : s[6]);
     const alt = Number(isSimulated ? s[3] : s[7] || 10000);
     const velocity = Number(isSimulated ? s[4] : s[9] || 220);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
 
-    seen.add(icao);
-
-    let entity = state.flights.get(icao);
+    seen.add(id);
+    let entity = state.flights.get(id);
     if (!entity) {
       entity = flightLayer.entities.add({
-        id: icao,
+        id,
         position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
         point: { pixelSize: 5, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.WHITE, outlineWidth: 1 },
         label: {
-          text: icao,
+          text: id,
           font: '10px sans-serif',
           pixelOffset: new Cesium.Cartesian2(0, -12),
           fillColor: Cesium.Color.WHITE,
@@ -344,19 +355,19 @@ function updateFlightEntities(statesInput) {
         },
         properties: {
           type: 'Aircraft',
-          callsign: icao,
+          callsign: id,
           velocity: `${Math.round(velocity)} m/s`,
           altitude: `${Math.round(alt)} m`
         }
       });
-      state.flights.set(icao, entity);
+      state.flights.set(id, entity);
     } else {
       const start = Cesium.JulianDate.now();
       const end = Cesium.JulianDate.addSeconds(start, POLL_INTERVAL_MS / 1000, new Cesium.JulianDate());
-      const position = new Cesium.SampledPositionProperty();
-      position.addSample(start, entity.position.getValue(start));
-      position.addSample(end, Cesium.Cartesian3.fromDegrees(lon, lat, alt));
-      entity.position = position;
+      const path = new Cesium.SampledPositionProperty();
+      path.addSample(start, entity.position.getValue(start));
+      path.addSample(end, Cesium.Cartesian3.fromDegrees(lon, lat, alt));
+      entity.position = path;
       entity.properties.velocity = `${Math.round(velocity)} m/s`;
       entity.properties.altitude = `${Math.round(alt)} m`;
     }
@@ -376,27 +387,32 @@ function simulateFlights() {
   const lat = Cesium.Math.toDegrees(center.latitude);
   return Array.from({ length: 18 }, (_, i) => ([
     `SIM${i}`,
-    lon + (Math.random() - 0.5) * 6,
-    lat + (Math.random() - 0.5) * 5,
+    lon + (Math.random() - 0.5) * 5,
+    lat + (Math.random() - 0.5) * 4,
     8000 + Math.random() * 4500,
     170 + Math.random() * 90
   ]));
 }
 
-async function fetchOverpass(query, timeoutMs = 7000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: query,
-      signal: controller.signal
-    });
-    return await response.json();
-  } finally {
-    clearTimeout(timeout);
+async function fetchOverpass(query, timeoutMs = 6000) {
+  let lastError;
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: query,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err;
+    }
   }
+  throw lastError || new Error('Overpass unavailable');
 }
 
 async function loadRoadsNear(lon, lat, radiusDeg) {
@@ -410,23 +426,18 @@ async function loadRoadsNear(lon, lat, radiusDeg) {
   const west = lon - radiusDeg;
   const north = lat + radiusDeg;
   const east = lon + radiusDeg;
-
-  const fastQuery = `[out:json][timeout:12];way["highway"](${south},${west},${north},${east});out geom;`;
+  const roadsQuery = `[out:json][timeout:12];way["highway"](${south},${west},${north},${east});out geom;`;
 
   let ways = [];
   try {
-    const data = await fetchOverpass(fastQuery, 7000);
+    const data = await fetchOverpass(roadsQuery, 6000);
     ways = (data.elements || [])
       .filter((e) => e.type === 'way' && Array.isArray(e.geometry))
-      .map((way) => ({
-        id: String(way.id),
-        coords: way.geometry.map((p) => [p.lon, p.lat])
-      }))
+      .map((way) => ({ id: String(way.id), coords: way.geometry.map((p) => [p.lon, p.lat]) }))
       .filter((road) => road.coords.length >= 2)
-      .sort((a, b) => b.coords.length - a.coords.length)
       .slice(0, MAX_ROADS);
   } catch (err) {
-    console.warn('Road fetch timed out; using synthetic roads.', err);
+    console.warn('Roads unavailable; using synthetic grid.', err);
   }
 
   if (ways.length === 0) {
@@ -443,6 +454,7 @@ async function loadRoadsNear(lon, lat, radiusDeg) {
 
   detectIntersections();
   buildTrafficEntities();
+  ui.selectionInfo.textContent = `Loaded ${state.roads.length} roads, ${state.trafficLights.length} lights, ${state.vehicles.length} vehicles.`;
 }
 
 async function loadFallbackBuildings(lon, lat, radiusDeg) {
@@ -452,27 +464,26 @@ async function loadFallbackBuildings(lon, lat, radiusDeg) {
   const west = lon - radiusDeg;
   const north = lat + radiusDeg;
   const east = lon + radiusDeg;
-
-  const query = `[out:json][timeout:12];way["building"](${south},${west},${north},${east});out geom;`;
+  const query = `[out:json][timeout:12];way["building"](${south},${west},${north},${east});out geom tags;`;
 
   try {
-    const data = await fetchOverpass(query, 7000);
+    const data = await fetchOverpass(query, 6000);
     const ways = (data.elements || [])
       .filter((e) => e.type === 'way' && Array.isArray(e.geometry) && e.geometry.length >= 3)
       .slice(0, MAX_BUILDINGS);
 
     ways.forEach((way) => {
       const positions = way.geometry.flatMap((pt) => [pt.lon, pt.lat]);
-      const levels = Number(way.tags?.['building:levels']) || 3 + Math.floor(Math.random() * 8);
-      const height = Math.min(80, Math.max(12, levels * 3.3));
-
+      const levels = Number(way.tags?.['building:levels']) || (2 + Math.floor(Math.random() * 8));
+      const height = Math.min(95, Math.max(10, levels * 3.2));
       buildingsLayer.entities.add({
         polygon: {
           hierarchy: Cesium.Cartesian3.fromDegreesArray(positions),
-          material: Cesium.Color.SLATEGRAY.withAlpha(0.7),
-          height: 0,
           extrudedHeight: height,
-          outline: false
+          height: 0,
+          material: Cesium.Color.GRAY.withAlpha(0.7),
+          outline: false,
+          perPositionHeight: false
         },
         properties: {
           type: 'Building',
@@ -487,7 +498,7 @@ async function loadFallbackBuildings(lon, lat, radiusDeg) {
 
 function makeSyntheticRoads(lon, lat) {
   const span = 0.02;
-  for (let i = -3; i <= 3; i += 1) {
+  for (let i = -4; i <= 4; i += 1) {
     state.roads.push({ id: `h-${i}`, coords: [[lon - span, lat + i * 0.004], [lon + span, lat + i * 0.004]], congestion: randomCongestion() });
     state.roads.push({ id: `v-${i}`, coords: [[lon + i * 0.004, lat - span], [lon + i * 0.004, lat + span]], congestion: randomCongestion() });
   }
@@ -495,11 +506,11 @@ function makeSyntheticRoads(lon, lat) {
 
 function simplifyRoad(coords) {
   if (coords.length <= 6) return coords;
-  const stride = Math.max(1, Math.floor(coords.length / 10));
-  const simplified = coords.filter((_, i) => i % stride === 0);
-  const tail = coords[coords.length - 1];
-  if (simplified[simplified.length - 1] !== tail) simplified.push(tail);
-  return simplified;
+  const step = Math.max(1, Math.floor(coords.length / 12));
+  const simple = coords.filter((_, i) => i % step === 0);
+  const last = coords[coords.length - 1];
+  if (simple[simple.length - 1] !== last) simple.push(last);
+  return simple;
 }
 
 function randomCongestion() {
@@ -509,7 +520,6 @@ function randomCongestion() {
 
 function detectIntersections() {
   const nodeCounter = new Map();
-
   state.roads.forEach((road) => {
     road.coords.forEach(([lon, lat]) => {
       const key = `${lon.toFixed(5)}:${lat.toFixed(5)}`;
@@ -529,7 +539,7 @@ function detectIntersections() {
       id: `light-${index}`,
       lon: intersection.lon,
       lat: intersection.lat,
-      phaseOffset: index * 4,
+      phaseOffset: index * 3,
       color: 'green',
       entity: null
     });
@@ -537,7 +547,7 @@ function detectIntersections() {
 }
 
 function congestionColor(level) {
-  if (level < 0.4) return Cesium.Color.LIME.withAlpha(0.8);
+  if (level < 0.4) return Cesium.Color.LIME.withAlpha(0.85);
   if (level < 0.7) return Cesium.Color.YELLOW.withAlpha(0.85);
   return Cesium.Color.RED.withAlpha(0.9);
 }
@@ -547,7 +557,7 @@ function buildTrafficEntities() {
     trafficLayer.entities.add({
       id: `road-${road.id}`,
       polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArrayHeights(road.coords.flatMap(([x, y]) => [x, y, 2])),
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights(road.coords.flatMap(([x, y]) => [x, y, 1])),
         width: 2,
         material: congestionColor(road.congestion)
       },
@@ -562,32 +572,23 @@ function buildTrafficEntities() {
   state.trafficLights.forEach((light) => {
     light.entity = trafficLayer.entities.add({
       id: light.id,
-      position: Cesium.Cartesian3.fromDegrees(light.lon, light.lat, 6),
-      point: { pixelSize: 7, color: Cesium.Color.GREEN },
+      position: Cesium.Cartesian3.fromDegrees(light.lon, light.lat, 5),
+      point: { pixelSize: 6, color: Cesium.Color.GREEN },
       properties: { type: 'Traffic Light', status: 'green' }
     });
   });
 
-  const vehicleRoads = state.roads.slice(0, VEHICLE_ROAD_LIMIT);
-  vehicleRoads.forEach((road, i) => {
+  state.roads.slice(0, VEHICLE_ROAD_LIMIT).forEach((road, i) => {
     const count = Math.max(1, Math.round(road.congestion * 4));
     for (let j = 0; j < count; j += 1) {
       if (state.vehicles.length >= MAX_VEHICLES) return;
-      const id = `veh-${i}-${j}`;
       const entity = trafficLayer.entities.add({
-        id,
+        id: `veh-${i}-${j}`,
         position: Cesium.Cartesian3.fromDegrees(road.coords[0][0], road.coords[0][1], 3),
         point: { pixelSize: 3.5, color: Cesium.Color.ORANGE },
         properties: { type: 'Vehicle', roadId: road.id, speed: '0.0' }
       });
-
-      state.vehicles.push({
-        road,
-        segment: 0,
-        t: Math.random(),
-        speed: 0.001 + Math.random() * 0.0013,
-        entity
-      });
+      state.vehicles.push({ road, segment: 0, t: Math.random(), speed: 0.001 + Math.random() * 0.0014, entity });
     }
   });
 
@@ -597,10 +598,10 @@ function buildTrafficEntities() {
 function recolorRoads() {
   state.roads.forEach((road) => {
     road.congestion = randomCongestion();
-    const roadEntity = trafficLayer.entities.getById(`road-${road.id}`);
-    if (roadEntity) {
-      roadEntity.polyline.material = congestionColor(road.congestion);
-      roadEntity.properties.congestion = road.congestion.toFixed(2);
+    const entity = trafficLayer.entities.getById(`road-${road.id}`);
+    if (entity) {
+      entity.polyline.material = congestionColor(road.congestion);
+      entity.properties.congestion = road.congestion.toFixed(2);
     }
   });
 }
@@ -617,7 +618,7 @@ function placeCctvMarkers(lon, lat) {
   cctvSources.forEach((source, index) => {
     cctvLayer.entities.add({
       id: `cctv-${index}`,
-      position: Cesium.Cartesian3.fromDegrees(lon + (index - 1) * 0.01, lat + (1 - index) * 0.01, 10),
+      position: Cesium.Cartesian3.fromDegrees(lon + (index - 1) * 0.01, lat + (1 - index) * 0.01, 8),
       billboard: {
         image: 'https://cdn-icons-png.flaticon.com/512/149/149852.png',
         width: 20,
@@ -635,7 +636,6 @@ function placeCctvMarkers(lon, lat) {
 
 function isInView(lon, lat, rect) {
   if (!rect) return true;
-
   const west = Cesium.Math.toDegrees(rect.west);
   const east = Cesium.Math.toDegrees(rect.east);
   const south = Cesium.Math.toDegrees(rect.south);
@@ -665,17 +665,14 @@ function stepSimulation() {
   state.trafficLights.forEach((light) => {
     const status = lightStatus(elapsed, light.phaseOffset);
     light.color = status;
-
     if (light.entity) {
-      const color = status === 'green' ? Cesium.Color.GREEN : status === 'yellow' ? Cesium.Color.YELLOW : Cesium.Color.RED;
-      light.entity.point.color = color;
+      light.entity.point.color = status === 'green' ? Cesium.Color.GREEN : status === 'yellow' ? Cesium.Color.YELLOW : Cesium.Color.RED;
       light.entity.properties.status = status;
     }
   });
 
   state.vehicles.forEach((vehicle) => {
     if (!vehicle.entity.show) return;
-
     const coords = vehicle.road.coords;
     if (coords.length < 2) return;
 
@@ -685,7 +682,6 @@ function stepSimulation() {
     const nextLat = Cesium.Math.lerp(from[1], to[1], vehicle.t);
 
     const blocked = state.trafficLights.some((light) => light.color === 'red' && Math.abs(light.lon - nextLon) < 0.0009 && Math.abs(light.lat - nextLat) < 0.0009);
-
     if (!blocked) {
       vehicle.t += vehicle.speed;
       if (vehicle.t >= 1) {
@@ -694,13 +690,9 @@ function stepSimulation() {
       }
     }
 
-    const currentFrom = coords[vehicle.segment % (coords.length - 1)];
-    const currentTo = coords[(vehicle.segment + 1) % (coords.length - 1) + 1];
-    vehicle.entity.position = Cesium.Cartesian3.fromDegrees(
-      Cesium.Math.lerp(currentFrom[0], currentTo[0], vehicle.t),
-      Cesium.Math.lerp(currentFrom[1], currentTo[1], vehicle.t),
-      3
-    );
+    const cFrom = coords[vehicle.segment % (coords.length - 1)];
+    const cTo = coords[(vehicle.segment + 1) % (coords.length - 1) + 1];
+    vehicle.entity.position = Cesium.Cartesian3.fromDegrees(Cesium.Math.lerp(cFrom[0], cTo[0], vehicle.t), Cesium.Math.lerp(cFrom[1], cTo[1], vehicle.t), 3);
     vehicle.entity.properties.speed = vehicle.speed.toFixed(4);
   });
 
@@ -708,29 +700,28 @@ function stepSimulation() {
 }
 
 setInterval(stepSimulation, SIM_INTERVAL_MS);
-setInterval(() => {
-  pollFlights(false);
-}, POLL_INTERVAL_MS);
+setInterval(() => pollFlights(false), POLL_INTERVAL_MS);
 
 (async function init() {
   await initImageryAndTerrain();
-  const useCesiumBuildings = await init3DBuildings();
+  await init3DBuildings();
 
   const initialLon = -74.006;
   const initialLat = 40.7128;
-  viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(initialLon, initialLat, 22000) });
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(initialLon, initialLat, 22000),
+    orientation: { pitch: Cesium.Math.toRadians(-45) }
+  });
 
   await refreshTrafficForFocus(initialLon, initialLat, true);
-  if (!useCesiumBuildings) {
-    await refreshBuildingsForFocus(initialLon, initialLat, true);
-  }
+  await refreshBuildingsForFocus(initialLon, initialLat, true);
   placeCctvMarkers(initialLon, initialLat);
   await pollFlights(true);
-  cullEntitiesByView();
 
+  cullEntitiesByView();
   ui.zoomLabel.textContent = `Zoom: ${Math.round(viewer.camera.positionCartographic.height).toLocaleString()}m`;
   if (!state.terrainIsReal) {
-    ui.selectionInfo.innerHTML = 'Running in fallback mode: terrain is ellipsoid and local extruded OSM buildings are used when zoomed in.';
+    ui.selectionInfo.innerHTML = 'Terrain fallback active. 3D buildings still render via OSM-extrusion fallback when Cesium tiles are unavailable.';
   }
   viewer.scene.requestRender();
 })();
