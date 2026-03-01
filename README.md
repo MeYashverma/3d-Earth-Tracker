@@ -98,6 +98,8 @@ No backend is required for this MVP.
 - Some third-party endpoints may rate-limit or block requests.
 - CCTV pages may restrict embedding in some browsers.
 - Rendering performance depends on zoom level and device GPU.
+- Globe imagery uses OpenStreetMap + ellipsoid terrain fallback so map tiles still load even without Cesium Ion credentials.
+- Performance tuning in this MVP favors responsiveness by capping roads/vehicles and reducing simulation update frequency.
 
 ## Next Steps
 
