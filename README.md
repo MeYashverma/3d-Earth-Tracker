@@ -13,9 +13,10 @@ A browser-based **CesiumJS** MVP that visualizes:
 ## Features
 
 ### 1) 3D Earth + Camera
-- Full 3D globe rendering with Cesium world terrain
+- Full 3D globe rendering with Cesium scene controls
 - User camera controls: zoom, pan, tilt, rotate
-- OSM 3D buildings (`createOsmBuildingsAsync`)
+- Google Photorealistic 3D Tiles support (when API key is provided)
+- OSM-based building fallback if Google photorealistic tiles are unavailable
 
 ### 2) Flight Tracker
 - Polls OpenSky every ~12 seconds using current camera bounding box
@@ -61,6 +62,8 @@ A browser-based **CesiumJS** MVP that visualizes:
 ```
 
 ## Run Locally
+
+- To enable Google Photorealistic 3D Tiles, define `window.GOOGLE_MAPS_API_KEY` before loading `app.js` (for example in `index.html` via an inline script).
 
 Because this is a static app, use any simple local web server:
 

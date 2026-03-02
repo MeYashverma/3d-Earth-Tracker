@@ -9,6 +9,8 @@ const VEHICLE_ROAD_LIMIT = 60;
 const MAX_BUILDINGS = 280;
 const ROAD_LOAD_MAX_HEIGHT = 180000;
 
+const GOOGLE_MAPS_API_KEY = window.GOOGLE_MAPS_API_KEY || '';
+
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter'
@@ -45,7 +47,8 @@ const state = {
   terrainIsReal: false,
   usingCesiumBuildings: false,
   flightBackoffUntil: 0,
-  trafficRequestSeq: 0
+  trafficRequestSeq: 0,
+  googleTilesLoaded: false
 };
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -219,6 +222,31 @@ function getBuildingRadiusByHeight(height) {
   return 0.04;
 }
 
+async function initGooglePhotorealisticTiles() {
+  if (!Cesium.createGooglePhotorealistic3DTileset) {
+    return;
+  }
+
+  if (!GOOGLE_MAPS_API_KEY) {
+    ui.selectionInfo.textContent = 'Google Photorealistic 3D Tiles not enabled: set window.GOOGLE_MAPS_API_KEY before loading the app.';
+    return;
+  }
+
+  try {
+    Cesium.GoogleMaps.defaultApiKey = GOOGLE_MAPS_API_KEY;
+    const tileset = await Cesium.createGooglePhotorealistic3DTileset();
+    tileset.maximumScreenSpaceError = 24;
+    tileset.dynamicScreenSpaceError = true;
+    viewer.scene.primitives.add(tileset);
+    viewer.scene.globe.show = false;
+    state.googleTilesLoaded = true;
+    ui.selectionInfo.textContent = 'Google Photorealistic 3D Tiles enabled.';
+  } catch (err) {
+    console.warn('Google Photorealistic 3D Tiles failed to load.', err);
+    ui.selectionInfo.textContent = 'Google Photorealistic 3D Tiles failed; using fallback terrain/buildings.';
+  }
+}
+
 async function initImageryAndTerrain() {
   viewer.imageryLayers.removeAll();
   const imageryProviders = [
@@ -244,6 +272,10 @@ async function initImageryAndTerrain() {
 }
 
 async function init3DBuildings() {
+  if (state.googleTilesLoaded) {
+    state.usingCesiumBuildings = true;
+    return true;
+  }
   state.usingCesiumBuildings = false;
   return false;
 }
@@ -281,7 +313,7 @@ async function refreshTrafficForFocus(lon, lat, force) {
 }
 
 async function refreshBuildingsForFocus(lon, lat, force) {
-  if (state.usingCesiumBuildings) {
+  if (state.googleTilesLoaded || state.usingCesiumBuildings) {
     buildingsLayer.entities.removeAll();
     return;
   }
@@ -731,6 +763,7 @@ setInterval(() => pollFlights(false), POLL_INTERVAL_MS);
 
 (async function init() {
   await initImageryAndTerrain();
+  await initGooglePhotorealisticTiles();
   await init3DBuildings();
 
   const initialLon = -74.006;
