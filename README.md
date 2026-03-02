@@ -41,9 +41,7 @@ A browser-based **CesiumJS** MVP that visualizes:
 
 ### 6) CCTV Integration
 - Includes embeddable public CCTV sources:
-  - EarthCam
-  - 511NY
-  - Insecam
+  - Insecam camera stream URLs
 - Shows CCTV markers near current city focus
 - Sidebar stream selector updates embedded iframe
 
@@ -90,7 +88,7 @@ No backend is required for this MVP.
 
 - OpenSky Network states API
 - OpenStreetMap roads/buildings (Overpass + Cesium OSM buildings)
-- Public CCTV websites with embeddable pages
+- Public CCTV streams from Insecam IP camera pages (embeddable where allowed)
 
 ## Notes / Limitations
 

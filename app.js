@@ -14,9 +14,18 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 const cctvSources = [
-  { name: 'EarthCam Times Square', url: 'https://www.earthcam.com/usa/newyork/timessquare/?cam=tsrobo1' },
-  { name: '511NY CCTV Portal', url: 'https://511ny.org/cctv' },
-  { name: 'Insecam Public Cameras', url: 'http://www.insecam.org/' }
+  {
+    name: 'Insecam Cam 1 (115.179.100.76)',
+    url: 'http://115.179.100.76:8080/ViewerFrame?Resolution=640x480&Quality=Standard&Size=STD&Language=0&Sound=Enable&Mode=JPEG&RPeriod=3&SendMethod=1&View=Full'
+  },
+  {
+    name: 'Insecam Cam 2 (31.173.253.61)',
+    url: 'http://31.173.253.61:8080/ViewerFrame?Resolution=640x480&Quality=Standard&Size=STD&Language=0&Sound=Enable&Mode=JPEG&RPeriod=3&SendMethod=1&View=Full'
+  },
+  {
+    name: 'Insecam Cam 3 (85.140.0.131)',
+    url: 'http://85.140.0.131:8080/ViewerFrame?Resolution=640x480&Quality=Standard&Size=STD&Language=0&Sound=Enable&Mode=JPEG&RPeriod=3&SendMethod=1&View=Full'
+  }
 ];
 
 const state = {
