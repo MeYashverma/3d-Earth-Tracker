@@ -44,7 +44,8 @@ const state = {
   loadingBuildings: false,
   terrainIsReal: false,
   usingCesiumBuildings: false,
-  flightBackoffUntil: 0
+  flightBackoffUntil: 0,
+  trafficRequestSeq: 0
 };
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -408,7 +409,7 @@ function simulateFlights() {
   ]));
 }
 
-async function fetchOverpass(query, timeoutMs = 6000) {
+async function fetchOverpass(query, timeoutMs = 3500) {
   let lastError;
   for (const endpoint of OVERPASS_ENDPOINTS) {
     const controller = new AbortController();
@@ -430,33 +431,43 @@ async function fetchOverpass(query, timeoutMs = 6000) {
 }
 
 async function loadRoadsNear(lon, lat, radiusDeg) {
+  const requestId = ++state.trafficRequestSeq;
+
+  // Render synthetic traffic immediately so roads/lights/vehicles appear without waiting on Overpass.
   trafficLayer.entities.removeAll();
   state.roads = [];
   state.intersections = [];
   state.trafficLights = [];
   state.vehicles = [];
+  makeSyntheticRoads(lon, lat);
+  detectIntersections();
+  buildTrafficEntities();
+  ui.selectionInfo.textContent = 'Loading live roads… showing fast synthetic preview.';
 
   const south = lat - radiusDeg;
   const west = lon - radiusDeg;
   const north = lat + radiusDeg;
   const east = lon + radiusDeg;
-  const roadsQuery = `[out:json][timeout:12];way["highway"](${south},${west},${north},${east});out geom;`;
+  const roadsQuery = `[out:json][timeout:8];way["highway"](${south},${west},${north},${east});out geom;`;
 
-  let ways = [];
   try {
-    const data = await fetchOverpass(roadsQuery, 6000);
-    ways = (data.elements || [])
+    const data = await fetchOverpass(roadsQuery, 3000);
+    if (requestId !== state.trafficRequestSeq) return;
+
+    const ways = (data.elements || [])
       .filter((e) => e.type === 'way' && Array.isArray(e.geometry))
       .map((way) => ({ id: String(way.id), coords: way.geometry.map((p) => [p.lon, p.lat]) }))
       .filter((road) => road.coords.length >= 2)
       .slice(0, MAX_ROADS);
-  } catch (err) {
-    console.warn('Roads unavailable; using synthetic grid.', err);
-  }
 
-  if (ways.length === 0) {
-    makeSyntheticRoads(lon, lat);
-  } else {
+    if (ways.length === 0) return;
+
+    trafficLayer.entities.removeAll();
+    state.roads = [];
+    state.intersections = [];
+    state.trafficLights = [];
+    state.vehicles = [];
+
     ways.forEach((road) => {
       state.roads.push({
         id: road.id,
@@ -464,11 +475,13 @@ async function loadRoadsNear(lon, lat, radiusDeg) {
         congestion: randomCongestion()
       });
     });
-  }
 
-  detectIntersections();
-  buildTrafficEntities();
-  ui.selectionInfo.textContent = `Loaded ${state.roads.length} roads, ${state.trafficLights.length} lights, ${state.vehicles.length} vehicles.`;
+    detectIntersections();
+    buildTrafficEntities();
+    ui.selectionInfo.textContent = `Loaded ${state.roads.length} live roads, ${state.trafficLights.length} lights, ${state.vehicles.length} vehicles.`;
+  } catch (err) {
+    // Keep already-rendered synthetic traffic; no further action required.
+  }
 }
 
 async function loadFallbackBuildings(lon, lat, radiusDeg) {

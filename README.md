@@ -101,6 +101,7 @@ No backend is required for this MVP.
 - When Cesium OSM 3D buildings are unavailable, the app falls back to local OSM building extrusion near the camera focus.
 - Roads are only loaded when sufficiently zoomed in to avoid very slow country-scale Overpass queries.
 - Roads are fetched from multiple Overpass endpoints with timeout failover for faster/more reliable loading.
+- Traffic now renders an immediate synthetic preview first, then swaps to live Overpass roads when available.
 - Performance tuning in this MVP favors responsiveness by capping roads/vehicles and reducing simulation update frequency.
 
 ## Next Steps
