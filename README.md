@@ -1,0 +1,115 @@
+# 3D Earth Tracker (MVP)
+
+A browser-based **CesiumJS** MVP that visualizes:
+
+- A 3D globe with terrain and OSM buildings
+- Live aircraft tracking from OpenSky (with fallback simulation)
+- Simulated road traffic and vehicle particles
+- Simulated traffic lights at detected intersections
+- Public CCTV links embedded in a right-side panel
+- Progressive traffic loading in small render batches to avoid UI stalls
+- Camera-driven refresh + viewport culling so only nearby/visible traffic entities stay active
+
+## Features
+
+### 1) 3D Earth + Camera
+- Full 3D globe rendering with Cesium scene controls
+- User camera controls: zoom, pan, tilt, rotate
+- Google Photorealistic 3D Tiles support (when API key is provided)
+- OSM-based building fallback if Google photorealistic tiles are unavailable
+
+### 2) Flight Tracker
+- Polls OpenSky every ~12 seconds using current camera bounding box
+- Adds aircraft markers and labels
+- Smooth transition between updates using sampled positions
+- Falls back to simulated flight data if API fetch fails
+
+### 3) Traffic Simulation
+- Loads nearby roads from OpenStreetMap via Overpass
+- Uses synthetic grid roads when Overpass is unavailable
+- Assigns congestion levels based on simulation hour + random variation
+- Colors roads by congestion (green / yellow / red)
+
+### 4) Vehicle Particles
+- Spawns vehicle points on roads (capped for performance)
+- Animates movement along road vectors each Cesium clock tick
+- Stops vehicles near red traffic lights
+
+### 5) Traffic Lights
+- Detects intersection candidates from repeated road nodes
+- Places light entities at intersections
+- Cycles states: green (30s) → yellow (5s) → red (30s)
+
+### 6) CCTV Integration
+- Includes embeddable public CCTV sources:
+  - Insecam camera stream URLs
+- Shows CCTV markers near current city focus
+- Sidebar stream selector updates embedded iframe
+
+### 7) Minimal UI
+- Top bar: location search + layer toggles
+- Right sidebar: selected object details + CCTV stream
+- Bottom bar: simulation time slider + zoom indicator
+
+## Project Structure
+
+```text
+.
+├── app.js        # Cesium scene bootstrapping + simulation logic
+├── index.html    # App layout and controls
+├── styles.css    # Minimal styling + Cesium widget hiding
+└── README.md
+```
+
+## Run Locally
+
+- To enable Google Photorealistic 3D Tiles, define `window.GOOGLE_MAPS_API_KEY` before loading `app.js` (for example in `index.html` via an inline script).
+
+Because this is a static app, use any simple local web server:
+
+```bash
+python3 -m http.server 4173
+```
+
+Then open:
+
+```text
+http://localhost:4173
+```
+
+## Deployment
+
+This project can be deployed as static hosting on:
+
+- GitHub Pages
+- Netlify
+- Vercel
+
+No backend is required for this MVP.
+
+## Data Sources
+
+- OpenSky Network states API
+- OpenStreetMap roads/buildings (Overpass + Cesium OSM buildings)
+- Public CCTV streams from Insecam IP camera pages (embeddable where allowed)
+
+## Notes / Limitations
+
+- Traffic is simulated (not real-time traffic API data).
+- Some third-party endpoints may rate-limit or block requests.
+- CCTV pages may restrict embedding in some browsers.
+- Insecam HTTP camera URLs are blocked by browsers on HTTPS hosts (mixed-content policy); run over HTTP or use HTTPS camera endpoints.
+- Rendering performance depends on zoom level and device GPU.
+- Globe imagery initializes with explicit non-Ion providers (OSM/CARTO) to avoid Cesium Ion 403 errors in token-restricted environments.
+- When Cesium OSM 3D buildings are unavailable, the app falls back to local OSM building extrusion near the camera focus.
+- Roads are only loaded when sufficiently zoomed in to avoid very slow country-scale Overpass queries.
+- Roads are fetched from multiple Overpass endpoints with timeout failover for faster/more reliable loading.
+- Traffic now renders an immediate synthetic preview first, then swaps to live Overpass roads when available.
+- Performance tuning in this MVP favors responsiveness by capping roads/vehicles and reducing simulation update frequency.
+
+## Next Steps
+
+- Add structured settings/config for tunable simulation parameters
+- Add historical playback for flights and traffic
+- Replace simple vehicle points with instanced 3D meshes
+- Add optional authenticated backend for richer data pipelines

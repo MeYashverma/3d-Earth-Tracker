@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Earth Tracker MVP</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.118/Build/Cesium/Widgets/widgets.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app" class="h-screen w-screen relative overflow-hidden">
+      <div id="cesiumContainer" class="h-full w-full"></div>
+
+      <div id="toolbar" class="glass-panel top-panel">
+        <div class="brand-row">
+          <span class="brand-dot"></span>
+          <span class="brand-title">Earth Tracker</span>
+          <span class="brand-chip">LIVE MVP</span>
+        </div>
+
+        <form id="search-form" class="search-row">
+          <input id="search-input" type="text" placeholder="Search city / country / area..." class="search-input" />
+          <button class="primary-btn" type="submit">Go</button>
+        </form>
+
+        <div class="toggle-row">
+          <label class="toggle-pill"><input id="toggle-flights" type="checkbox" checked /> Flights</label>
+          <label class="toggle-pill"><input id="toggle-traffic" type="checkbox" checked /> Traffic</label>
+          <label class="toggle-pill"><input id="toggle-cctv" type="checkbox" checked /> CCTV</label>
+        </div>
+      </div>
+
+      <aside id="sidebar" class="glass-panel side-panel">
+        <h2 class="panel-title">Details</h2>
+        <div id="selection-info" class="panel-text">Click an object to view details.</div>
+
+        <h3 class="panel-title mt-4">CCTV Stream</h3>
+        <select id="cctv-select" class="panel-select"></select>
+        <iframe id="cctv-frame" title="CCTV stream" class="panel-frame" loading="lazy" allowfullscreen></iframe>
+      </aside>
+
+      <div id="bottom-bar" class="glass-panel bottom-panel">
+        <label for="time-slider" class="bottom-label">Simulation time</label>
+        <input id="time-slider" type="range" min="0" max="23" step="1" value="12" class="bottom-slider" />
+        <span id="time-label" class="bottom-value">12:00</span>
+        <span id="zoom-label" class="bottom-value">Zoom: --</span>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.118/Build/Cesium/Cesium.js"></script>
+    <script>
+      // Optional: set your Google Photorealistic 3D Tiles key here.
+      // window.GOOGLE_MAPS_API_KEY = "YOUR_API_KEY";
+    </script>
+    <script src="app.js"></script>
+  </body>
+</html>
