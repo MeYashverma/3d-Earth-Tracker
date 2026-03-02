@@ -10,32 +10,42 @@
   </head>
   <body>
     <div id="app" class="h-screen w-screen relative overflow-hidden">
-      <div id="toolbar" class="absolute top-3 left-3 right-3 z-20 bg-gray-900/80 text-white p-3 rounded-lg shadow-lg flex flex-wrap gap-2 items-center">
-        <form id="search-form" class="flex-1 min-w-64 flex gap-2">
-          <input id="search-input" type="text" placeholder="Search location (e.g., New York)" class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm" />
-          <button class="bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded text-sm" type="submit">Go</button>
-        </form>
-        <label class="inline-flex items-center gap-1 text-sm"><input id="toggle-flights" type="checkbox" checked /> Flights</label>
-        <label class="inline-flex items-center gap-1 text-sm"><input id="toggle-traffic" type="checkbox" checked /> Traffic</label>
-        <label class="inline-flex items-center gap-1 text-sm"><input id="toggle-cctv" type="checkbox" checked /> CCTV</label>
-      </div>
-
-      <div id="sidebar" class="absolute top-20 right-3 bottom-16 w-80 z-20 bg-gray-900/85 text-white p-3 rounded-lg shadow-lg overflow-auto">
-        <h2 class="text-lg font-semibold mb-2">Details</h2>
-        <div id="selection-info" class="text-sm text-gray-200">Click an object to view details.</div>
-        <h3 class="text-md font-semibold mt-4 mb-2">CCTV Stream</h3>
-        <select id="cctv-select" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm mb-2"></select>
-        <iframe id="cctv-frame" title="CCTV stream" class="w-full h-48 rounded border border-gray-700 bg-black" loading="lazy" allowfullscreen></iframe>
-      </div>
-
-      <div id="bottom-bar" class="absolute left-3 right-3 bottom-3 z-20 bg-gray-900/80 text-white p-3 rounded-lg shadow-lg flex items-center gap-3">
-        <label for="time-slider" class="text-sm whitespace-nowrap">Simulation time</label>
-        <input id="time-slider" type="range" min="0" max="23" step="1" value="12" class="flex-1" />
-        <span id="time-label" class="text-sm w-28 text-right">12:00</span>
-        <span id="zoom-label" class="text-sm w-32 text-right">Zoom: --</span>
-      </div>
-
       <div id="cesiumContainer" class="h-full w-full"></div>
+
+      <div id="toolbar" class="glass-panel top-panel">
+        <div class="brand-row">
+          <span class="brand-dot"></span>
+          <span class="brand-title">Earth Tracker</span>
+          <span class="brand-chip">LIVE MVP</span>
+        </div>
+
+        <form id="search-form" class="search-row">
+          <input id="search-input" type="text" placeholder="Search city / country / area..." class="search-input" />
+          <button class="primary-btn" type="submit">Go</button>
+        </form>
+
+        <div class="toggle-row">
+          <label class="toggle-pill"><input id="toggle-flights" type="checkbox" checked /> Flights</label>
+          <label class="toggle-pill"><input id="toggle-traffic" type="checkbox" checked /> Traffic</label>
+          <label class="toggle-pill"><input id="toggle-cctv" type="checkbox" checked /> CCTV</label>
+        </div>
+      </div>
+
+      <aside id="sidebar" class="glass-panel side-panel">
+        <h2 class="panel-title">Details</h2>
+        <div id="selection-info" class="panel-text">Click an object to view details.</div>
+
+        <h3 class="panel-title mt-4">CCTV Stream</h3>
+        <select id="cctv-select" class="panel-select"></select>
+        <iframe id="cctv-frame" title="CCTV stream" class="panel-frame" loading="lazy" allowfullscreen></iframe>
+      </aside>
+
+      <div id="bottom-bar" class="glass-panel bottom-panel">
+        <label for="time-slider" class="bottom-label">Simulation time</label>
+        <input id="time-slider" type="range" min="0" max="23" step="1" value="12" class="bottom-slider" />
+        <span id="time-label" class="bottom-value">12:00</span>
+        <span id="zoom-label" class="bottom-value">Zoom: --</span>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.118/Build/Cesium/Cesium.js"></script>

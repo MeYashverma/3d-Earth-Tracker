@@ -3,13 +3,170 @@ body,
 #app {
   margin: 0;
   padding: 0;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: #0b1020;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: #040711;
 }
 
 #cesiumContainer {
   position: absolute;
   inset: 0;
+}
+
+.glass-panel {
+  position: absolute;
+  z-index: 20;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, rgba(19, 27, 52, 0.82), rgba(10, 15, 32, 0.7));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  color: #e6eeff;
+}
+
+.top-panel {
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+}
+
+.brand-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.brand-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.35);
+  border: 1px solid rgba(147, 197, 253, 0.6);
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+}
+
+.search-input,
+.panel-select {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #e2e8f0;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.search-input::placeholder {
+  color: #93a4c3;
+}
+
+.primary-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  color: white;
+  font-weight: 600;
+}
+
+.toggle-row {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.side-panel {
+  top: 126px;
+  right: 14px;
+  bottom: 78px;
+  width: 320px;
+  border-radius: 14px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.panel-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.panel-text {
+  font-size: 13px;
+  color: #c9d4ea;
+  line-height: 1.45;
+}
+
+.panel-frame {
+  margin-top: 10px;
+  width: 100%;
+  height: 210px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: #020617;
+}
+
+.bottom-panel {
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bottom-label {
+  font-size: 12px;
+  color: #c7d6f4;
+  white-space: nowrap;
+}
+
+.bottom-slider {
+  flex: 1;
+}
+
+.bottom-value {
+  font-size: 12px;
+  color: #e2e8f0;
+  min-width: 88px;
+  text-align: right;
 }
 
 .cesium-viewer-toolbar,
