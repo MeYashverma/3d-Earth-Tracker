@@ -1,4 +1,5 @@
-const POLL_INTERVAL_MS = 12000;
+const POLL_INTERVAL_MS = 15000;
+const FLIGHT_BACKOFF_MS = 120000;
 const SIM_INTERVAL_MS = 140;
 const MAX_AIRCRAFT = 90;
 const MAX_ROADS = 220;
@@ -42,11 +43,13 @@ const state = {
   loadingTraffic: false,
   loadingBuildings: false,
   terrainIsReal: false,
-  usingCesiumBuildings: false
+  usingCesiumBuildings: false,
+  flightBackoffUntil: 0
 };
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+  imageryProvider: new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }),
   timeline: false,
   animation: false,
   selectionIndicator: true,
@@ -96,10 +99,10 @@ for (const src of cctvSources) {
   option.textContent = src.name;
   ui.cctvSelect.appendChild(option);
 }
-ui.cctvFrame.src = cctvSources[0].url;
+setCctvFrameSource(cctvSources[0].url);
 
 ui.cctvSelect.addEventListener('change', () => {
-  ui.cctvFrame.src = ui.cctvSelect.value;
+  setCctvFrameSource(ui.cctvSelect.value);
 });
 
 ui.toggleFlights.addEventListener('change', () => {
@@ -111,6 +114,16 @@ ui.toggleTraffic.addEventListener('change', () => {
 ui.toggleCctv.addEventListener('change', () => {
   cctvLayer.show = ui.toggleCctv.checked;
 });
+
+
+function setCctvFrameSource(url) {
+  if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+    ui.cctvFrame.src = 'about:blank';
+    ui.selectionInfo.textContent = 'CCTV stream blocked by browser mixed-content policy on HTTPS. Open via HTTP host or use HTTPS camera streams.';
+    return;
+  }
+  ui.cctvFrame.src = url;
+}
 
 ui.timeSlider.addEventListener('input', () => {
   state.simulationHour = Number(ui.timeSlider.value);
@@ -224,29 +237,14 @@ async function initImageryAndTerrain() {
     }
   }
 
-  try {
-    const terrain = await Cesium.createWorldTerrainAsync({ requestVertexNormals: false, requestWaterMask: false });
-    viewer.terrainProvider = terrain;
-    viewer.scene.globe.depthTestAgainstTerrain = true;
-    state.terrainIsReal = true;
-  } catch (err) {
-    state.terrainIsReal = false;
-    viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-    console.warn('World terrain unavailable; using ellipsoid fallback.', err);
-  }
+  viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+  viewer.scene.globe.depthTestAgainstTerrain = false;
+  state.terrainIsReal = false;
 }
 
 async function init3DBuildings() {
-  try {
-    const tileset = await Cesium.createOsmBuildingsAsync();
-    tileset.maximumScreenSpaceError = 18;
-    tileset.skipLevelOfDetail = true;
-    viewer.scene.primitives.add(tileset);
-    state.usingCesiumBuildings = true;
-  } catch (err) {
-    state.usingCesiumBuildings = false;
-    console.warn('Cesium OSM 3D buildings unavailable; will use OSM extrusion fallback.', err);
-  }
+  state.usingCesiumBuildings = false;
+  return false;
 }
 
 async function refreshTrafficForFocus(lon, lat, force) {
@@ -312,6 +310,7 @@ async function refreshBuildingsForFocus(lon, lat, force) {
 
 async function pollFlights(force = false) {
   const now = Date.now();
+  if (now < state.flightBackoffUntil) return;
   if (!force && now - state.lastFlightPoll < POLL_INTERVAL_MS) return;
   state.lastFlightPoll = now;
 
@@ -327,6 +326,12 @@ async function pollFlights(force = false) {
 
   try {
     const response = await fetch(openSkyUrl);
+    if (response.status === 429) {
+      state.flightBackoffUntil = Date.now() + FLIGHT_BACKOFF_MS;
+      updateFlightEntities(simulateFlights());
+      return;
+    }
+    if (!response.ok) throw new Error(`OpenSky error ${response.status}`);
     const payload = await response.json();
     updateFlightEntities(payload.states || []);
   } catch (err) {

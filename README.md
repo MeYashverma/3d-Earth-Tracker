@@ -95,8 +95,9 @@ No backend is required for this MVP.
 - Traffic is simulated (not real-time traffic API data).
 - Some third-party endpoints may rate-limit or block requests.
 - CCTV pages may restrict embedding in some browsers.
+- Insecam HTTP camera URLs are blocked by browsers on HTTPS hosts (mixed-content policy); run over HTTP or use HTTPS camera endpoints.
 - Rendering performance depends on zoom level and device GPU.
-- Globe imagery now initializes with explicit provider fallbacks and attempts real Cesium World Terrain first, with ellipsoid fallback if unavailable.
+- Globe imagery initializes with explicit non-Ion providers (OSM/CARTO) to avoid Cesium Ion 403 errors in token-restricted environments.
 - When Cesium OSM 3D buildings are unavailable, the app falls back to local OSM building extrusion near the camera focus.
 - Roads are only loaded when sufficiently zoomed in to avoid very slow country-scale Overpass queries.
 - Roads are fetched from multiple Overpass endpoints with timeout failover for faster/more reliable loading.
